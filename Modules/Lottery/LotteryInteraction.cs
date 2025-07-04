@@ -202,7 +202,7 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 			rows.Add(string.Join(", ", formattedNumbers.Skip(i).Take(10)));
 		}
 		string numbers = string.Join("\n", rows);
-		await RespondAsync($"Currently unused: {numbers}", ephemeral: true);
+		await RespondAsync($"Currently unused: \n{numbers}", ephemeral: true);
 	}
 
 
