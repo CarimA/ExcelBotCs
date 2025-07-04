@@ -186,8 +186,23 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 	[SlashCommand("unusednumbers", "Check what numbers have not yet been used.")]
 	public async Task UnusedNumbers()
 	{
-		var numbers = (await GetNotGuessedNumbers()).Select(num => num.ToString()).ToList().PrettyJoin();
-		await RespondAsync($"Currently unused: {numbers}", ephemeral: true);
+        // var numbers = (await GetNotGuessedNumbers()).Select(num => num.ToString()).ToList().PrettyJoin();
+        var GuessedNumbers = (await GetGuessedNumbers());
+
+		var lotteryRange = Enumerable.Range(1,99).ToList(); // maybe make range a config parameter
+		var formattedNumbers = lotteryRange.Select(num => GuessedNumbers.Contains(num) ? "__" : num.ToString("D2")).ToList();
+
+        //insert placeholder for the missing 0 in the first line
+        formattedNumbers.Insert(0, "xx");
+
+       //split into rows of 10
+        var rows = new List<string>();
+        for (int i = 0; i < formattedNumbers.Count; i+=10)
+        {
+            rows.Add(string.Join(", ", formattedNumbers.Skip(i).Take(10)));
+        }
+		string numbers = string.Join("\n", rows);
+        await RespondAsync($"Currently unused: {numbers}", ephemeral: true);
 	}
 
 
