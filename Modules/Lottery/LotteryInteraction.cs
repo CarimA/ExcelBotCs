@@ -186,7 +186,7 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 	[SlashCommand("unused", "Check what numbers have not yet been used.")]
 	public async Task UnusedNumbers()
 	{
-		var guessedNumbers = (await GetGuessedNumbers());
+		var guessedNumbers = await GetGuessedNumbers();
 		var formattedNumbers = (List<string>)["  ", .. Enumerable.Range(1, 99).Select(num => guessedNumbers.Contains(num) ? "__" : num.ToString("D2"))];
 		var output = string.Join('\n', formattedNumbers.Chunk(10).Select(subList => string.Join(' ', subList)));
 		await RespondAsync($"```{output}```", ephemeral: true);
