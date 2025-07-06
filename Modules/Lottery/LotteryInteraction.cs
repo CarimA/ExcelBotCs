@@ -217,7 +217,7 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 
 
 	[SlashCommand("luckydip", "Spin the wheel and maybe you'll win!")]
-	public async Task RandomGuess([Summary("number-pool", "Determines whether to use a random number from 1-99, unguessed or guessed numbers (default: 1-99)")] RandomGuessType numberPool = RandomGuessType.Any)
+	public async Task RandomGuess([Summary("number-pool", "Determines whether to use a random number from 1-99, unguessed or guessed numbers (default: ungessed numbers)")] RandomGuessType numberPool = RandomGuessType.UnusedOnly)
 	{
 		var cts = new CancellationTokenSource();
 		var task = TryRandomGuess(cts.Token, numberPool);
