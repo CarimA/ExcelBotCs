@@ -172,13 +172,13 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 
 		await RespondAsync(result switch
 		{
-			NotFcMemberGuessResponse _ => "Only FC members can participate in the lottery",
+			NotFcMemberGuessResponse _ => "Only FC members can participate in the lottery.",
 			OutOfRangeGuessResponse _ => "You can only pick a number between 1 and 99.",
 			AlreadyGuessedNumberGuessResponse _ => $"You have already guessed {number}!",
 			NoMoreGuessesGuessResponse r =>
 				$"You don't have any guesses left! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.",
 			SuccessGuessResponse r =>
-				$"Your guess for {r.Number} was recorded! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess. {(await GetRemainingGuesses(Context.GuildUser())).Output}", //Todo: add information if someone else already guessed that number and maybe who it is
+				$"Your guess for {r.Number} was recorded! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess. {(await GetRemainingGuesses(Context.GuildUser())).Output}", //TODO: add information if someone else already guessed that number and maybe who it is
 			_ => throw new NotImplementedException()
 		}, ephemeral: true);
 	}
@@ -216,44 +216,95 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 	}
 
 
-	[SlashCommand("luckydip", "Spin the wheel and maybe you'll win!")] //Todo: Idea: Repeat until the user has no guesses left
-	public async Task RandomGuess([Summary("number-pool", "Determines whether to use a random number from 1-99, unguessed or guessed numbers (default: ungessed numbers)")] RandomGuessType numberPool = RandomGuessType.UnusedOnly)
+	[SlashCommand("luckydip", "Spin the wheel and maybe you'll win!")]
+	public async Task RandomGuess([Summary("number-pool", "Determines whether to use a random number from 1-99, unguessed or guessed numbers (default: unguessed numbers)")] RandomGuessType numberPool = RandomGuessType.UnusedOnly)
 	{
-		var cts = new CancellationTokenSource();
-		var task = TryRandomGuess(cts.Token, numberPool);
-		await DeferAsync(true);
+        await DeferAsync(true);
 
-		if (await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5), cts.Token)) == task)
+        SocketGuildUser user = Context.GuildUser();
+
+        // Get how many guesses the user can still make
+		// The following is duplicating logic from TryGuess and GetRemainingGuesses to get the left over guesses of a user
+		// TODO Extract shared logic for easy reuse
+		
+		if (!CanParticipate(user))
 		{
-			await cts.CancelAsync();
-			var result = await task;
+            await FollowupAsync("Only FC members can participate in the lottery.", ephemeral: true);
+            return;
+        }
 
-			if (result is SuccessGuessResponse success)
-			{
-				await InsertGuess(success.Number);
-				await PostInLotteryChannel(
-					$"<@{Context.GuildUser().Id}> used a random draw and got {success.Number}. Current guesses: {success.PrettyCurrentGuesses}");
-			}
+        List<LotteryGuess> currentGuesses = await _lotteryGuesses
+            .Where(guess => guess.DiscordId == user.Id)
+            .ToListAsync();
 
-			await FollowupAsync(result switch
-			{
-				NotFcMemberGuessResponse => "Only FC members can participate in the lottery",
-				NoMoreGuessesGuessResponse r =>
-					$"You don't have any guesses left! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess. {(await GetRemainingGuesses(Context.GuildUser())).Output}",
-				SuccessGuessResponse r =>
-					$"Your guess for {r.Number} was recorded! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.", //Todo: add information if someone else already guessed that number and maybe who it is
-				OutOfRangeGuessResponse => "This number pool has no valid numbers to use, try another number pool.",
-				_ => "Something went wrong, try again later. If this keeps happening, let Zahrymm know."
-			}, ephemeral: true);
-		}
-		else
+        List<ExtraLotteryGuess> extraGuesses = await _extraLotteryGuesses
+            .Where(guess => guess.DiscordId == user.Id)
+            .ToListAsync();
+
+        int used = currentGuesses.Count;
+        int allowed = 1 + extraGuesses.Count;
+        int remaining = allowed - used;
+	
+		//Handling for a message it the user has no guesses left to begin with
+		if (remaining <= 0 )
 		{
-			await cts.CancelAsync();
-			await FollowupAsync(
-				"Picking a number took too long, try again later. If this keeps happening, let Zahrymm know.",
+			List<string> guessStrings = currentGuesses
+				.Select(guess => guess.Number.ToString())
+				.ToList();
+
+            string prettyCurrentGuesses = guessStrings.PrettyJoin();
+
+            await FollowupAsync(
+				$"You don't have any guesses left! Current guesses: {prettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.",
 				ephemeral: true);
+			return;
 		}
-	}
+
+        //Collect messages to send after the loop as discord only allows one Followup Message per Interaction.
+        List<string> messages = new List<string>();
+
+        //Core Loop to repeat for each guess until none are left
+        for (int i = 0; i < remaining; i++)
+        {
+            CancellationTokenSource cts = new CancellationTokenSource();
+            Task<IGuessResponse> task = TryRandomGuess(cts.Token, numberPool);
+
+            if (await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5), cts.Token)) == task)
+            {
+                await cts.CancelAsync();
+                IGuessResponse result = await task;
+
+                if (result is SuccessGuessResponse success)
+                {
+                    await InsertGuess(success.Number);
+                    await PostInLotteryChannel(
+                        $"<@{user.Id}> used a random draw and got {success.Number}. Current guesses: {success.PrettyCurrentGuesses}");
+                }
+
+                // Constructing response message
+                string followupMessage = result switch
+                {
+                    NotFcMemberGuessResponse => "Only FC members can participate in the lottery.",
+                    NoMoreGuessesGuessResponse r =>
+                        $"You don't have any guesses left! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess. {(await GetRemainingGuesses(Context.GuildUser())).Output}",
+                    SuccessGuessResponse r =>
+                        $"Your guess for {r.Number} was recorded! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.", //TODO: add information if someone else already guessed that number and maybe who it is
+                    OutOfRangeGuessResponse => "This number pool has no valid numbers to use, try another number pool.",
+                    _ => "Something went wrong, try again later. If this keeps happening, let Zahrymm know."
+                };
+
+                messages.Add($"Guess #{i + 1}: {followupMessage}");
+            }
+            else
+            {
+                await cts.CancelAsync();
+                messages.Add($"Guess #{i + 1}: Picking a number took too long, try again later. If this keeps happening, let Zahrymm know.");
+                break; // Exit loop early to not retry - Optionaly could not break here to retry for every following guess.
+            }
+        }
+
+        await FollowupAsync(string.Join("\n", messages), ephemeral: true);
+    }
 
 	private async Task<(List<LotteryGuess>? CurrentGuesses, string Output)> GetRemainingGuesses(SocketGuildUser user)
 	{
@@ -318,13 +369,13 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 
 		await RespondAsync(result switch
 		{
-			NotFcMemberGuessResponse _ => "Only FC members can participate in the lottery",
+			NotFcMemberGuessResponse _ => "Only FC members can participate in the lottery.",
 			OutOfRangeGuessResponse _ => "You can only pick a number between 1 and 99.",
 			AlreadyGuessedNumberGuessResponse _ => $"You have already guessed {@new}.",
 			NotCurrentGuessedNumberGuessResponse _ =>
 				$"You have not guessed {old}. You need to use a number you have already guessed in order to change it.",
 			SuccessGuessResponse r =>
-				$"Your guess for {old} was changed to {@new}! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.", //Todo: add information if someone else already guessed that number and maybe who it is
+				$"Your guess for {old} was changed to {@new}! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.", //TODO: add information if someone else already guessed that number and maybe who it is
 			_ => throw new NotImplementedException()
 		}, ephemeral: true);
 	}
@@ -351,7 +402,7 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 	{
 		if (!CanParticipate(Context.GuildUser()))
 		{
-			await RespondAsync("Only FC members can participate in the lottery", ephemeral: true);
+			await RespondAsync("Only FC members can participate in the lottery.", ephemeral: true);
 			return;
 		}
 
