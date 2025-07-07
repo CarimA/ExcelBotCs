@@ -178,31 +178,18 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 			NoMoreGuessesGuessResponse r =>
 				$"You don't have any guesses left! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.",
 			SuccessGuessResponse r =>
-				$"Your guess for {r.Number} was recorded! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess. {(await GetRemainingGuesses(Context.GuildUser())).Output}",
+				$"Your guess for {r.Number} was recorded! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess. {(await GetRemainingGuesses(Context.GuildUser())).Output}", //Todo: add information if someone else already guessed that number and maybe who it is
 			_ => throw new NotImplementedException()
 		}, ephemeral: true);
 	}
 
-	[SlashCommand("unusednumbers", "Check what numbers have not yet been used.")]
+	[SlashCommand("unused", "Check what numbers have not yet been used.")]
 	public async Task UnusedNumbers()
 	{
-		// var numbers = (await GetNotGuessedNumbers()).Select(num => num.ToString()).ToList().PrettyJoin();
-		var GuessedNumbers = (await GetGuessedNumbers());
-
-		var lotteryRange = Enumerable.Range(1,99).ToList(); // maybe make range a config parameter
-		var formattedNumbers = lotteryRange.Select(num => GuessedNumbers.Contains(num) ? "__" : num.ToString("D2")).ToList();
-
-		//insert placeholder for the missing 0 in the first line
-		formattedNumbers.Insert(0, "xx");
-
-		//split into rows of 10
-		var rows = new List<string>();
-		for (int i = 0; i < formattedNumbers.Count; i+=10)
-		{
-			rows.Add(string.Join(", ", formattedNumbers.Skip(i).Take(10)));
-		}
-		string numbers = string.Join("\n", rows);
-		await RespondAsync($"Currently unused: \n{numbers}", ephemeral: true);
+		var guessedNumbers = await GetGuessedNumbers();
+		var formattedNumbers = (List<string>)["  ", .. Enumerable.Range(1, 99).Select(num => guessedNumbers.Contains(num) ? "__" : num.ToString("D2"))];
+		var output = string.Join('\n', formattedNumbers.Chunk(10).Select(subList => string.Join(' ', subList)));
+		await RespondAsync($"```{output}```", ephemeral: true);
 	}
 
 
@@ -229,8 +216,8 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 	}
 
 
-	[SlashCommand("luckydip", "Spin the wheel and maybe you'll win!")]
-	public async Task RandomGuess([Summary("number-pool", "Determines whether to use a random number from 1-99, unguessed or guessed numbers (default: 1-99)")] RandomGuessType numberPool = RandomGuessType.Any)
+	[SlashCommand("luckydip", "Spin the wheel and maybe you'll win!")] //Todo: Idea: Repeat until the user has no guesses left
+	public async Task RandomGuess([Summary("number-pool", "Determines whether to use a random number from 1-99, unguessed or guessed numbers (default: ungessed numbers)")] RandomGuessType numberPool = RandomGuessType.UnusedOnly)
 	{
 		var cts = new CancellationTokenSource();
 		var task = TryRandomGuess(cts.Token, numberPool);
@@ -254,7 +241,7 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 				NoMoreGuessesGuessResponse r =>
 					$"You don't have any guesses left! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess. {(await GetRemainingGuesses(Context.GuildUser())).Output}",
 				SuccessGuessResponse r =>
-					$"Your guess for {r.Number} was recorded! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.",
+					$"Your guess for {r.Number} was recorded! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.", //Todo: add information if someone else already guessed that number and maybe who it is
 				OutOfRangeGuessResponse => "This number pool has no valid numbers to use, try another number pool.",
 				_ => "Something went wrong, try again later. If this keeps happening, let Zahrymm know."
 			}, ephemeral: true);
@@ -337,7 +324,7 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 			NotCurrentGuessedNumberGuessResponse _ =>
 				$"You have not guessed {old}. You need to use a number you have already guessed in order to change it.",
 			SuccessGuessResponse r =>
-				$"Your guess for {old} was changed to {@new}! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.",
+				$"Your guess for {old} was changed to {@new}! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.", //Todo: add information if someone else already guessed that number and maybe who it is
 			_ => throw new NotImplementedException()
 		}, ephemeral: true);
 	}
