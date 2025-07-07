@@ -302,8 +302,12 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
                 break; // Exit loop early to not retry - Optionaly could not break here to retry for every following guess.
             }
         }
-
-        await FollowupAsync(string.Join("\n", messages), ephemeral: true);
+		//Only send followup if it filled
+		if (message.Count > 0)
+		{
+			await FollowupAsync(string.Join("\n", messages), ephemeral: true);
+		}
+        
     }
 
 	private async Task<(List<LotteryGuess>? CurrentGuesses, string Output)> GetRemainingGuesses(SocketGuildUser user)
