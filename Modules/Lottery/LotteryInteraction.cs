@@ -51,9 +51,6 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 		if (!CanParticipate(Context.GuildUser()))
 			return new NotFcMemberGuessResponse();
 
-		if (number is <= 0 or >= 100)
-			return new OutOfRangeGuessResponse();
-
 		var currentGuesses = await _lotteryGuesses
 			.Where(guess => guess.DiscordId == Context.GuildUser().Id)
 			.ToListAsync();
@@ -86,9 +83,6 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 	{
 		if (!CanParticipate(Context.GuildUser()))
 			return new NotFcMemberGuessResponse();
-
-		if (newNumber is <= 0 or >= 100)
-			return new OutOfRangeGuessResponse();
 
 		var currentGuesses = await _lotteryGuesses
 			.Where(guess => guess.DiscordId == Context.GuildUser().Id)
@@ -159,7 +153,7 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 	}
 
 	[SlashCommand("guess", "Pick a number and have a chance to win!")]
-	public async Task Guess(int number)
+	public async Task Guess([MinValue(1), MaxValue(99)] int number)
 	{
 		var result = await TryGuess(number);
 
@@ -173,7 +167,6 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 		await RespondAsync(result switch
 		{
 			NotFcMemberGuessResponse _ => "Only FC members can participate in the lottery.",
-			OutOfRangeGuessResponse _ => "You can only pick a number between 1 and 99.",
 			AlreadyGuessedNumberGuessResponse _ => $"You have already guessed {number}!",
 			NoMoreGuessesGuessResponse r =>
 				$"You don't have any guesses left! Current guesses: {r.PrettyCurrentGuesses}. You can use `/lottery change` to change an existing guess.",
@@ -360,7 +353,7 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 	}
 
 	[SlashCommand("change", "Change one of your current guesses")]
-	public async Task Change(int old, int @new)
+	public async Task Change([MinValue(1), MaxValue(99)] int old,[MinValue(1), MaxValue(99)] int @new)
 	{
 		var result = await TryChangeGuess(Context.GuildUser(), old, @new);
 
@@ -374,7 +367,6 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 		await RespondAsync(result switch
 		{
 			NotFcMemberGuessResponse _ => "Only FC members can participate in the lottery.",
-			OutOfRangeGuessResponse _ => "You can only pick a number between 1 and 99.",
 			AlreadyGuessedNumberGuessResponse _ => $"You have already guessed {@new}.",
 			NotCurrentGuessedNumberGuessResponse _ =>
 				$"You have not guessed {old}. You need to use a number you have already guessed in order to change it.",
@@ -385,7 +377,7 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 	}
 
 	[SlashCommand("whoguessed", "Check who has guessed a certain number.")]
-	public async Task WhoGuessed(int number)
+	public async Task WhoGuessed([MinValue(1), MaxValue(99)] int number)
 	{
 		var currentGuesses = await _lotteryGuesses
 			.Where(guess => guess.Number == number)
