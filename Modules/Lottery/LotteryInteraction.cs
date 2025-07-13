@@ -362,26 +362,49 @@ public class LotteryInteraction : InteractionModuleBase<SocketInteractionContext
 	[SlashCommand("view", "Check your current guesses and see how many guesses you have left.")]
 	public async Task View()
 	{
-		if (!CanParticipate(Context.GuildUser()))
+
+        var user = Context.GuildUser();
+
+        if (!CanParticipate(user))
 		{
 			await RespondAsync("Only FC members can participate in the lottery", ephemeral: true);
 			return;
 		}
 
-		var (currentGuesses, displayAmount) = await GetRemainingGuesses(Context.GuildUser());
+		var (currentGuesses, displayAmount) = await GetRemainingGuesses(user);
 
 		if (currentGuesses.Count == 0)
 		{
 			await RespondAsync(displayAmount, ephemeral: true);
-		}
-		else
-		{
-			var guesses = currentGuesses.Select(guess => guess.Number).ToList();
-			guesses.Sort();
-			var displayedGuesses = guesses.Select(guess => guess.ToString()).ToList().PrettyJoin();
+            return;
+        }
 
-			await RespondAsync($"Current guesses: {displayedGuesses}. {displayAmount}", ephemeral: true);
-		}
+        List<int> guessNumbers = currentGuesses.Select(g => g.Number).ToList();
+
+        // collect guesses by other users for the same numbers
+        var duplicateGuesses = await _lotteryGuesses
+            .Where(g => guessNumbers.Contains(g.Number) && g.DiscordId != user.Id)
+            .ToListAsync();
+
+		//TODO Maybe replace the count with the name of other guessers
+        // list of guesses with inline count of duplicate guesses
+        var displayedGuesses = guessNumbers
+            .OrderBy(n => n)
+            .Select(n =>
+            {
+                // Count how many other users also guessed this number
+                int count = duplicateGuesses.Count(d => d.Number == n);
+
+                // If there are duplicates, show the count
+                return count > 0
+                    ? $"{n} (also guessed by {count} other{(count > 1 ? "s" : "")})"
+                    : n.ToString();
+            })
+            .ToList();
+
+        string output = string.Join("\n", displayedGuesses);
+
+        await RespondAsync($"Current guesses:\n{output}.\n{displayAmount}", ephemeral: true);
 	}
 
 	[SlashCommand("run", "Runs the lottery.")]
